@@ -1,4 +1,4 @@
-# Intent Mapper
+# Mapping Project
 
 Config-driven intent normalization and taxonomy mapping for customer service data.
 
@@ -66,7 +66,7 @@ python analyze_intents.py
 ## Project Structure
 
 ```
-intent-mapper/
+mapping-project/
 ├── generate_synthetic_data.py   # Sample data generator
 ├── explore_intents.py           # Raw intent exploration
 ├── analyze_intents.py           # Normalization pipeline
