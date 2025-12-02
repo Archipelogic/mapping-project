@@ -247,7 +247,7 @@ def parse_genai_response(response_str):
                 "Transfer_Details": None, "Summary": None, "parse_error": "fallback"}
 
 
-def normalize_intent(raw_intent, exact_mapping, categories_meta, fuzzy_threshold=0.80):
+def normalize_intent(raw_intent, exact_mapping, categories_meta, fuzzy_threshold=0.80, enable_fuzzy=True):
     """Map raw intent to canonical category."""
     if pd.isna(raw_intent) or not raw_intent:
         return ("_empty", False, 0.0, "empty")
@@ -258,6 +258,10 @@ def normalize_intent(raw_intent, exact_mapping, categories_meta, fuzzy_threshold
         canonical = exact_mapping[raw_lower]
         is_billing = categories_meta.get(canonical, {}).get("is_billing", False)
         return (canonical, is_billing, 1.0, "exact")
+    
+    # Skip expensive fuzzy matching if disabled
+    if not enable_fuzzy:
+        return ("_unmapped", False, 0.0, "no_match")
     
     best_match, best_score = None, 0
     for variation, canonical in exact_mapping.items():
@@ -272,7 +276,7 @@ def normalize_intent(raw_intent, exact_mapping, categories_meta, fuzzy_threshold
     return ("_unmapped", False, 0.0, "unmapped")
 
 
-def analyze_call_data(input_path, taxonomy):
+def analyze_call_data(input_path, taxonomy, enable_fuzzy=True):
     """Main analysis pipeline."""
     print(f"Loading: {input_path}")
     df = pd.read_csv(input_path)
@@ -281,6 +285,8 @@ def analyze_call_data(input_path, taxonomy):
     exact_mapping, categories_meta = build_intent_mapping(taxonomy)
     fuzzy_threshold = taxonomy.get("settings", {}).get("fuzzy_threshold", 0.80)
     print(f"Taxonomy: {len(categories_meta)} categories, {len(exact_mapping)} variations")
+    if not enable_fuzzy:
+        print("Fuzzy matching: DISABLED (fast mode)")
     
     parsed = df['genai_response'].apply(parse_genai_response)
     parsed_df = pd.DataFrame(parsed.tolist())
@@ -290,7 +296,7 @@ def analyze_call_data(input_path, taxonomy):
     df['summary'] = parsed_df['Summary']
     
     print("Normalizing intents...")
-    normalized = df['raw_intent'].apply(lambda x: normalize_intent(x, exact_mapping, categories_meta, fuzzy_threshold))
+    normalized = df['raw_intent'].apply(lambda x: normalize_intent(x, exact_mapping, categories_meta, fuzzy_threshold, enable_fuzzy))
     df['normalized_intent'] = normalized.apply(lambda x: x[0])
     df['is_billing_related'] = normalized.apply(lambda x: x[1])
     df['intent_confidence'] = normalized.apply(lambda x: x[2])
@@ -551,6 +557,7 @@ def main():
     parser.add_argument("--output", "-o", default="output")
     parser.add_argument("--taxonomy", "-t", default=DEFAULT_TAXONOMY_PATH)
     parser.add_argument("--init-taxonomy", action="store_true", help="Generate starter taxonomy.json")
+    parser.add_argument("--no-fuzzy", action="store_true", help="Disable fuzzy matching (faster, exact match only)")
     args = parser.parse_args()
     
     if args.init_taxonomy:
@@ -564,7 +571,7 @@ def main():
         print("\nRun: python analyze_intents.py --init-taxonomy")
         return
     
-    df, stats = analyze_call_data(args.input, taxonomy)
+    df, stats = analyze_call_data(args.input, taxonomy, enable_fuzzy=not args.no_fuzzy)
     print("\nGenerating deliverables...")
     generate_deliverables(df, stats, taxonomy, args.output)
     
