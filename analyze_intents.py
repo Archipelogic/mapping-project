@@ -58,7 +58,8 @@ def generate_starter_taxonomy(input_path, output_path="taxonomy.json", top_n=100
     df = pd.read_csv(input_path)
     
     intents = []
-    for resp in df['genai_response']:
+    parse_errors = 0
+    for i, resp in enumerate(df['genai_response']):
         try:
             data = json.loads(resp)
             # Handle various nested structures
@@ -76,11 +77,17 @@ def generate_starter_taxonomy(input_path, output_path="taxonomy.json", top_n=100
                 intent = inner.get('Intent') or inner.get('intent', '')
                 if intent:
                     intents.append(intent)
-        except:
-            pass
+            # Debug: show first record structure
+            if i == 0:
+                print(f"  Sample keys: {list(data.keys())}")
+                print(f"  Inner keys: {list(inner.keys()) if isinstance(inner, dict) else 'not a dict'}")
+        except Exception as e:
+            parse_errors += 1
+            if parse_errors == 1:
+                print(f"  Parse error sample: {e}")
     
     intent_counts = Counter(intents)
-    print(f"Found {len(intent_counts)} unique intents")
+    print(f"Found {len(intent_counts)} unique intents (from {len(intents)} total, {parse_errors} parse errors)")
     
     keyword_groups = {
         "payment_make": {"keywords": ["pay ", "payment", "make payment"], "is_billing": True, "description": "Customer wants to make a payment"},
