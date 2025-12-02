@@ -36,28 +36,30 @@ def parse_genai_response(response_str):
     
     try:
         data = json.loads(response_str)
-        # Handle nested structure: {"GenAI_Summary": {"Intent": ...}}
-        if "GenAI_Summary" in data:
-            inner = data["GenAI_Summary"]
-            # GenAI_Summary might be a JSON string itself
-            if isinstance(inner, str):
-                try:
-                    inner = json.loads(inner)
-                except:
-                    inner = data
-        else:
-            inner = data
         
-        # Ensure inner is a dict before calling .get()
+        # Handle various nested structures
+        inner = data
+        for key in ["GenAI_Summary", "ContactSummary", "genai_summary", "contact_summary"]:
+            if key in data:
+                inner = data[key]
+                # Might be a JSON string itself
+                if isinstance(inner, str):
+                    try:
+                        inner = json.loads(inner)
+                    except:
+                        inner = data
+                break
+        
+        # Ensure inner is a dict
         if not isinstance(inner, dict):
             inner = {}
         
         return {
-            "Intent": inner.get("Intent"),
-            "Customer_On_Hold": inner.get("Customer_On_Hold"),
-            "Transfer_Details": inner.get("Transfer_Details"),
-            "ActionItems_Caller": inner.get("ActionItems_Caller"),
-            "Summary": inner.get("Summary"),
+            "Intent": inner.get("Intent") or inner.get("intent"),
+            "Customer_On_Hold": inner.get("Customer_On_Hold") or inner.get("customer_on_hold"),
+            "Transfer_Details": inner.get("Transfer_Details") or inner.get("transfer_details"),
+            "ActionItems_Caller": inner.get("ActionItems_Caller") or inner.get("action_items"),
+            "Summary": inner.get("Summary") or inner.get("summary"),
             "parse_success": True,
             "parse_error": None
         }

@@ -61,18 +61,19 @@ def generate_starter_taxonomy(input_path, output_path="taxonomy.json", top_n=100
     for resp in df['genai_response']:
         try:
             data = json.loads(resp)
-            # Handle nested structure: {"GenAI_Summary": {"Intent": ...}}
-            if "GenAI_Summary" in data:
-                inner = data["GenAI_Summary"]
-                if isinstance(inner, str):
-                    try:
-                        inner = json.loads(inner)
-                    except:
-                        inner = data
-            else:
-                inner = data
+            # Handle various nested structures
+            inner = data
+            for key in ["GenAI_Summary", "ContactSummary", "genai_summary", "contact_summary"]:
+                if key in data:
+                    inner = data[key]
+                    if isinstance(inner, str):
+                        try:
+                            inner = json.loads(inner)
+                        except:
+                            inner = data
+                    break
             if isinstance(inner, dict):
-                intent = inner.get('Intent', '')
+                intent = inner.get('Intent') or inner.get('intent', '')
                 if intent:
                     intents.append(intent)
         except:
@@ -144,20 +145,23 @@ def parse_genai_response(response_str):
         return {"Intent": None, "Customer_On_Hold": None, "Transfer_Details": None, "Summary": None, "parse_error": "empty"}
     try:
         data = json.loads(response_str)
-        # Handle nested structure: {"GenAI_Summary": {"Intent": ...}}
-        if "GenAI_Summary" in data:
-            inner = data["GenAI_Summary"]
-            if isinstance(inner, str):
-                try:
-                    inner = json.loads(inner)
-                except:
-                    inner = data
-        else:
-            inner = data
+        # Handle various nested structures
+        inner = data
+        for key in ["GenAI_Summary", "ContactSummary", "genai_summary", "contact_summary"]:
+            if key in data:
+                inner = data[key]
+                if isinstance(inner, str):
+                    try:
+                        inner = json.loads(inner)
+                    except:
+                        inner = data
+                break
         if not isinstance(inner, dict):
             inner = {}
-        return {"Intent": inner.get("Intent"), "Customer_On_Hold": inner.get("Customer_On_Hold"),
-                "Transfer_Details": inner.get("Transfer_Details"), "Summary": inner.get("Summary"), "parse_error": None}
+        return {"Intent": inner.get("Intent") or inner.get("intent"),
+                "Customer_On_Hold": inner.get("Customer_On_Hold") or inner.get("customer_on_hold"),
+                "Transfer_Details": inner.get("Transfer_Details") or inner.get("transfer_details"),
+                "Summary": inner.get("Summary") or inner.get("summary"), "parse_error": None}
     except:
         intent_match = re.search(r'"Intent"\s*:\s*"([^"]*)"', response_str)
         return {"Intent": intent_match.group(1) if intent_match else None, "Customer_On_Hold": None,
