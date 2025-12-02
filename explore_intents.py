@@ -236,6 +236,8 @@ def cluster_by_keywords(intents_counter):
 def analyze_field(series, field_name):
     """Analyze a single text field."""
     non_empty = series.dropna()
+    # Convert lists to strings for counting
+    non_empty = non_empty.apply(lambda x: str(x) if isinstance(x, list) else x)
     non_empty = non_empty[non_empty.astype(str).str.strip() != ""]
     
     if len(non_empty) == 0:
