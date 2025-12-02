@@ -147,12 +147,18 @@ def similarity_ratio(s1, s2):
     """Calculate similarity ratio between two strings."""
     return SequenceMatcher(None, s1, s2).ratio()
 
-def find_fuzzy_clusters(intents_counter, threshold=0.75):
+def find_fuzzy_clusters(intents_counter, threshold=0.75, max_intents=1000):
     """
     Find clusters of similar intents using fuzzy matching.
     Returns list of clusters, each cluster is a list of (intent, count) tuples.
+    Limited to top N intents by frequency to avoid O(n²) explosion.
     """
-    intents = list(intents_counter.keys())
+    # Only process top intents by frequency to avoid O(n²) explosion
+    top_intents = [k for k, v in intents_counter.most_common(max_intents) if k]
+    if len(intents_counter) > max_intents:
+        print(f"    (limiting fuzzy matching to top {max_intents} of {len(intents_counter)} intents)")
+    
+    intents = top_intents
     normalized = {intent: normalize_for_comparison(intent) for intent in intents}
     
     # Track which intents have been clustered
