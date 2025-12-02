@@ -36,12 +36,17 @@ def parse_genai_response(response_str):
     
     try:
         data = json.loads(response_str)
+        # Handle nested structure: {"GenAI_Summary": {"Intent": ...}}
+        if "GenAI_Summary" in data and isinstance(data["GenAI_Summary"], dict):
+            inner = data["GenAI_Summary"]
+        else:
+            inner = data
         return {
-            "Intent": data.get("Intent"),
-            "Customer_On_Hold": data.get("Customer_On_Hold"),
-            "Transfer_Details": data.get("Transfer_Details"),
-            "ActionItems_Caller": data.get("ActionItems_Caller"),
-            "Summary": data.get("Summary"),
+            "Intent": inner.get("Intent"),
+            "Customer_On_Hold": inner.get("Customer_On_Hold"),
+            "Transfer_Details": inner.get("Transfer_Details"),
+            "ActionItems_Caller": inner.get("ActionItems_Caller"),
+            "Summary": inner.get("Summary"),
             "parse_success": True,
             "parse_error": None
         }

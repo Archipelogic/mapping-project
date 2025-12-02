@@ -61,7 +61,11 @@ def generate_starter_taxonomy(input_path, output_path="taxonomy.json", top_n=100
     for resp in df['genai_response']:
         try:
             data = json.loads(resp)
-            intent = data.get('Intent', '')
+            # Handle nested structure: {"GenAI_Summary": {"Intent": ...}}
+            if "GenAI_Summary" in data and isinstance(data["GenAI_Summary"], dict):
+                intent = data["GenAI_Summary"].get('Intent', '')
+            else:
+                intent = data.get('Intent', '')
             if intent:
                 intents.append(intent)
         except:
@@ -133,8 +137,13 @@ def parse_genai_response(response_str):
         return {"Intent": None, "Customer_On_Hold": None, "Transfer_Details": None, "Summary": None, "parse_error": "empty"}
     try:
         data = json.loads(response_str)
-        return {"Intent": data.get("Intent"), "Customer_On_Hold": data.get("Customer_On_Hold"),
-                "Transfer_Details": data.get("Transfer_Details"), "Summary": data.get("Summary"), "parse_error": None}
+        # Handle nested structure: {"GenAI_Summary": {"Intent": ...}}
+        if "GenAI_Summary" in data and isinstance(data["GenAI_Summary"], dict):
+            inner = data["GenAI_Summary"]
+        else:
+            inner = data
+        return {"Intent": inner.get("Intent"), "Customer_On_Hold": inner.get("Customer_On_Hold"),
+                "Transfer_Details": inner.get("Transfer_Details"), "Summary": inner.get("Summary"), "parse_error": None}
     except:
         intent_match = re.search(r'"Intent"\s*:\s*"([^"]*)"', response_str)
         return {"Intent": intent_match.group(1) if intent_match else None, "Customer_On_Hold": None,
