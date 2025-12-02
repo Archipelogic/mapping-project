@@ -572,8 +572,9 @@ def generate_html_report(overview, intent_analysis, fuzzy_clusters, keyword_clus
 """
     
     cumulative = 0
+    total_with_intent = intent_analysis['total_with_intent'] or 1  # Avoid division by zero
     for i, (intent, count) in enumerate(intent_analysis['frequency'].items(), 1):
-        pct = count / intent_analysis['total_with_intent'] * 100
+        pct = count / total_with_intent * 100
         cumulative += pct
         display_intent = intent if intent else "(empty)"
         html += f"""
@@ -790,6 +791,14 @@ def main():
     print("\n[1/6] Parsing genai_response...")
     parsed = df['genai_response'].apply(parse_genai_response)
     parsed_df = pd.DataFrame(parsed.tolist())
+    
+    # Debug: show parsing results
+    intent_count = parsed_df['Intent'].notna().sum()
+    print(f"    Intents extracted: {intent_count} of {len(df)}")
+    if intent_count == 0:
+        # Show sample of raw data for debugging
+        print("    WARNING: No intents extracted. Sample raw data:")
+        print(f"    {df['genai_response'].iloc[0][:200]}...")
     
     # Dataset overview
     print("[2/6] Generating dataset overview...")
