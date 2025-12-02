@@ -62,12 +62,19 @@ def generate_starter_taxonomy(input_path, output_path="taxonomy.json", top_n=100
         try:
             data = json.loads(resp)
             # Handle nested structure: {"GenAI_Summary": {"Intent": ...}}
-            if "GenAI_Summary" in data and isinstance(data["GenAI_Summary"], dict):
-                intent = data["GenAI_Summary"].get('Intent', '')
+            if "GenAI_Summary" in data:
+                inner = data["GenAI_Summary"]
+                if isinstance(inner, str):
+                    try:
+                        inner = json.loads(inner)
+                    except:
+                        inner = data
             else:
-                intent = data.get('Intent', '')
-            if intent:
-                intents.append(intent)
+                inner = data
+            if isinstance(inner, dict):
+                intent = inner.get('Intent', '')
+                if intent:
+                    intents.append(intent)
         except:
             pass
     
@@ -138,10 +145,17 @@ def parse_genai_response(response_str):
     try:
         data = json.loads(response_str)
         # Handle nested structure: {"GenAI_Summary": {"Intent": ...}}
-        if "GenAI_Summary" in data and isinstance(data["GenAI_Summary"], dict):
+        if "GenAI_Summary" in data:
             inner = data["GenAI_Summary"]
+            if isinstance(inner, str):
+                try:
+                    inner = json.loads(inner)
+                except:
+                    inner = data
         else:
             inner = data
+        if not isinstance(inner, dict):
+            inner = {}
         return {"Intent": inner.get("Intent"), "Customer_On_Hold": inner.get("Customer_On_Hold"),
                 "Transfer_Details": inner.get("Transfer_Details"), "Summary": inner.get("Summary"), "parse_error": None}
     except:
