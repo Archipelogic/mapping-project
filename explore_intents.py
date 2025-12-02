@@ -804,7 +804,6 @@ def main():
     intent_count = parsed_df['Intent'].notna().sum()
     print(f"    Intents extracted: {intent_count} of {len(df)}")
     if intent_count == 0:
-        # Show sample of raw data for debugging
         print("    WARNING: No intents extracted. Sample raw data:")
         print(f"    {df['genai_response'].iloc[0][:200]}...")
     
