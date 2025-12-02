@@ -332,6 +332,167 @@ def calculate_statistics(df, categories_meta):
     return stats
 
 
+def generate_html_taxonomy_report(taxonomy, stats, output_path):
+    """Generate interactive HTML report for taxonomy review."""
+    categories = taxonomy.get("categories", {})
+    meta = taxonomy.get("_meta", {})
+    
+    # Calculate category stats
+    cat_stats = []
+    for cat_name, cat_data in categories.items():
+        count = stats['intent_distribution'].get(cat_name, 0)
+        pct = count / stats['total_records'] * 100 if stats['total_records'] > 0 else 0
+        cat_stats.append({
+            "name": cat_name,
+            "description": cat_data.get("description", ""),
+            "is_billing": cat_data.get("is_billing", False),
+            "variations": cat_data.get("variations", []),
+            "count": count,
+            "pct": pct
+        })
+    cat_stats.sort(key=lambda x: -x['count'])
+    
+    html = f"""<!DOCTYPE html>
+<html>
+<head>
+    <title>Taxonomy Report</title>
+    <style>
+        * {{ box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }}
+        body {{ margin: 0; padding: 20px; background: #f5f5f5; }}
+        .container {{ max-width: 1400px; margin: 0 auto; }}
+        h1 {{ color: #333; margin-bottom: 5px; }}
+        .subtitle {{ color: #666; margin-bottom: 20px; }}
+        .stats-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 30px; }}
+        .stat-card {{ background: white; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }}
+        .stat-value {{ font-size: 32px; font-weight: bold; color: #2563eb; }}
+        .stat-label {{ color: #666; font-size: 14px; }}
+        .coverage-good {{ color: #16a34a; }}
+        .coverage-bad {{ color: #dc2626; }}
+        .category-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 20px; }}
+        .category-card {{ background: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); overflow: hidden; }}
+        .category-header {{ padding: 15px 20px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; }}
+        .category-name {{ font-weight: 600; font-size: 16px; }}
+        .category-name.auto {{ color: #9333ea; }}
+        .category-name.uncategorized {{ color: #dc2626; }}
+        .category-count {{ background: #e5e7eb; padding: 4px 12px; border-radius: 20px; font-size: 14px; }}
+        .billing-badge {{ background: #dbeafe; color: #1d4ed8; padding: 4px 8px; border-radius: 4px; font-size: 12px; margin-left: 8px; }}
+        .category-desc {{ padding: 10px 20px; color: #666; font-size: 14px; border-bottom: 1px solid #eee; }}
+        .variations {{ padding: 15px 20px; max-height: 200px; overflow-y: auto; }}
+        .variation {{ display: inline-block; background: #f3f4f6; padding: 4px 10px; margin: 3px; border-radius: 4px; font-size: 13px; font-family: monospace; }}
+        .section-title {{ font-size: 20px; margin: 30px 0 15px; color: #333; }}
+        .filter-bar {{ margin-bottom: 20px; }}
+        .filter-bar input {{ padding: 10px 15px; width: 300px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; }}
+        .filter-bar select {{ padding: 10px 15px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; margin-left: 10px; }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Taxonomy Report</h1>
+        <p class="subtitle">Generated {datetime.now().strftime('%Y-%m-%d %H:%M')} | Source: {meta.get('generated_from', 'taxonomy.json')}</p>
+        
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-value">{stats['total_records']:,}</div>
+                <div class="stat-label">Total Records</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value {'coverage-good' if stats['pct_mapped'] >= 95 else 'coverage-bad'}">{stats['pct_mapped']:.1f}%</div>
+                <div class="stat-label">Coverage</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">{len([c for c in categories if not c.startswith('_')])}</div>
+                <div class="stat-label">Categories</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">{stats['billing_related_count']:,}</div>
+                <div class="stat-label">Billing-Related ({stats['pct_billing_related']:.1f}%)</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">{stats['records_unmapped']:,}</div>
+                <div class="stat-label">Unmapped</div>
+            </div>
+        </div>
+        
+        <div class="filter-bar">
+            <input type="text" id="search" placeholder="Search categories or variations..." onkeyup="filterCards()">
+            <select id="typeFilter" onchange="filterCards()">
+                <option value="all">All Categories</option>
+                <option value="billing">Billing Only</option>
+                <option value="auto">Auto-Generated</option>
+                <option value="uncategorized">Uncategorized</option>
+            </select>
+        </div>
+        
+        <h2 class="section-title">Categories</h2>
+        <div class="category-grid" id="categoryGrid">
+"""
+    
+    for cat in cat_stats:
+        name_class = ""
+        if cat['name'].startswith('auto_'):
+            name_class = "auto"
+        elif cat['name'].startswith('_'):
+            name_class = "uncategorized"
+        
+        billing_badge = '<span class="billing-badge">BILLING</span>' if cat['is_billing'] else ''
+        
+        variations_html = ''.join([f'<span class="variation">{v}</span>' for v in cat['variations'][:50]])
+        if len(cat['variations']) > 50:
+            variations_html += f'<span class="variation">+{len(cat["variations"]) - 50} more...</span>'
+        
+        html += f"""
+            <div class="category-card" data-name="{cat['name']}" data-billing="{str(cat['is_billing']).lower()}" data-variations="{' '.join(cat['variations'][:20]).lower()}">
+                <div class="category-header">
+                    <div>
+                        <span class="category-name {name_class}">{cat['name']}</span>
+                        {billing_badge}
+                    </div>
+                    <span class="category-count">{cat['count']:,} ({cat['pct']:.1f}%)</span>
+                </div>
+                <div class="category-desc">{cat['description']}</div>
+                <div class="variations">{variations_html}</div>
+            </div>
+"""
+    
+    html += """
+        </div>
+    </div>
+    
+    <script>
+    function filterCards() {
+        const search = document.getElementById('search').value.toLowerCase();
+        const typeFilter = document.getElementById('typeFilter').value;
+        const cards = document.querySelectorAll('.category-card');
+        
+        cards.forEach(card => {
+            const name = card.dataset.name.toLowerCase();
+            const variations = card.dataset.variations;
+            const isBilling = card.dataset.billing === 'true';
+            
+            let show = true;
+            
+            // Search filter
+            if (search && !name.includes(search) && !variations.includes(search)) {
+                show = false;
+            }
+            
+            // Type filter
+            if (typeFilter === 'billing' && !isBilling) show = false;
+            if (typeFilter === 'auto' && !name.startsWith('auto_')) show = false;
+            if (typeFilter === 'uncategorized' && !name.startsWith('_')) show = false;
+            
+            card.style.display = show ? 'block' : 'none';
+        });
+    }
+    </script>
+</body>
+</html>
+"""
+    
+    with open(output_path, 'w') as f:
+        f.write(html)
+
+
 def generate_deliverables(df, stats, taxonomy, output_dir="output"):
     """Generate all deliverables."""
     output_path = Path(output_dir)
@@ -377,6 +538,10 @@ def generate_deliverables(df, stats, taxonomy, output_dir="output"):
         json.dump({"coverage_pct": stats['pct_mapped'], "unmapped_count": stats['records_unmapped'],
                    "billing_pct": stats['pct_billing_related'], "match_types": stats['match_type_distribution']}, f, indent=2)
     print(f"Saved: {output_path}/data_quality_report.json")
+    
+    # HTML Taxonomy Report
+    generate_html_taxonomy_report(taxonomy, stats, output_path / "taxonomy_report.html")
+    print(f"Saved: {output_path}/taxonomy_report.html")
 
 
 def main():
