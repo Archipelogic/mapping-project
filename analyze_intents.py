@@ -52,6 +52,47 @@ def build_intent_mapping(taxonomy):
     return exact_mapping, categories_meta
 
 
+def _normalize_for_fuzzy(text):
+    """Normalize text for fuzzy comparison."""
+    if not text:
+        return ""
+    text = str(text).lower().strip()
+    text = re.sub(r"[^\w\s']", " ", text)
+    text = re.sub(r"\s+", " ", text)
+    return text
+
+
+def _fuzzy_cluster_intents(intent_counts, threshold=0.80, max_intents=1000):
+    """Cluster similar intents using fuzzy matching."""
+    # Limit to top N by frequency
+    top_intents = [k for k, v in Counter(intent_counts).most_common(max_intents) if k]
+    normalized = {intent: _normalize_for_fuzzy(intent) for intent in top_intents}
+    
+    clustered = set()
+    clusters = []
+    
+    for i, intent1 in enumerate(top_intents):
+        if intent1 in clustered:
+            continue
+        cluster = [(intent1, intent_counts[intent1])]
+        clustered.add(intent1)
+        norm1 = normalized[intent1]
+        
+        for intent2 in top_intents[i+1:]:
+            if intent2 in clustered:
+                continue
+            norm2 = normalized[intent2]
+            if SequenceMatcher(None, norm1, norm2).ratio() >= threshold:
+                cluster.append((intent2, intent_counts[intent2]))
+                clustered.add(intent2)
+        
+        if len(cluster) > 1:
+            clusters.append(sorted(cluster, key=lambda x: -x[1]))
+    
+    clusters.sort(key=lambda c: -sum(count for _, count in c))
+    return clusters
+
+
 def generate_starter_taxonomy(input_path, output_path="taxonomy.json", top_n=100):
     """Generate a starter taxonomy.json from raw data."""
     print(f"Loading data from: {input_path}")
@@ -105,6 +146,8 @@ def generate_starter_taxonomy(input_path, output_path="taxonomy.json", top_n=100
     categories = {}
     assigned = set()
     
+    # Pass 1: Keyword-based categorization
+    print("  Pass 1: Keyword matching...")
     for group_name, group_info in keyword_groups.items():
         variations = []
         for intent, count in intent_counts.most_common():
@@ -119,7 +162,36 @@ def generate_starter_taxonomy(input_path, output_path="taxonomy.json", top_n=100
                 "is_billing": group_info["is_billing"],
                 "variations": sorted(variations, key=lambda x: -intent_counts[x])
             }
+    print(f"    Keyword matches: {len(assigned)}")
     
+    # Pass 2: Fuzzy clustering for remaining intents
+    print("  Pass 2: Fuzzy clustering variations...")
+    remaining = {k: v for k, v in intent_counts.items() if k not in assigned and k}
+    
+    if remaining:
+        # Fuzzy cluster the remaining intents
+        fuzzy_clusters = _fuzzy_cluster_intents(remaining, threshold=0.80, max_intents=1000)
+        
+        fuzzy_assigned = 0
+        for cluster in fuzzy_clusters:
+            if len(cluster) < 2:
+                continue
+            # Use most frequent as canonical name
+            canonical = cluster[0][0]
+            # Create a sanitized category name
+            cat_name = f"auto_{re.sub(r'[^a-z0-9]+', '_', canonical.lower())[:30]}"
+            variations = [intent for intent, count in cluster]
+            categories[cat_name] = {
+                "description": f"AUTO-GROUPED: Similar to '{canonical}'",
+                "is_billing": False,  # Review needed
+                "variations": variations
+            }
+            for intent, _ in cluster:
+                assigned.add(intent)
+                fuzzy_assigned += 1
+        print(f"    Fuzzy clusters: {len([c for c in fuzzy_clusters if len(c) >= 2])}, intents grouped: {fuzzy_assigned}")
+    
+    # Remaining uncategorized
     uncategorized = [i for i, c in intent_counts.most_common(top_n) if i not in assigned and i]
     if uncategorized:
         categories["_uncategorized"] = {
